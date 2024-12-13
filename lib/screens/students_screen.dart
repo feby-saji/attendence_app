@@ -3,6 +3,7 @@ import 'package:student_attendance/db/db.dart';
 import 'package:student_attendance/functions/excel_to_student.dart';
 import 'package:student_attendance/functions/import_excel.dart';
 import 'package:student_attendance/model/student.dart';
+import 'package:student_attendance/screens/main_screen.dart';
 import 'package:student_attendance/widgets/excel_sheet_student.dart';
 
 ValueNotifier<List<Student>> allStudents = ValueNotifier<List<Student>>([]);
@@ -18,6 +19,8 @@ class _StudentsScreenState extends State<StudentsScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Initial load ofa all students
     Db().loadAllStudents();
   }
 

@@ -41,15 +41,17 @@ class MainScreenState extends State<MainScreen> {
     );
   }
 
-  datePciker(BuildContext context) async {
+  Future<void> datePciker(BuildContext context) async {
     DateTime? pickedDate = await showDatePicker(
       context: context,
+      initialDate: sessionDate.value, // Show the current session date
       firstDate: DateTime.now().subtract(const Duration(days: 30)),
       lastDate: DateTime.now(),
     );
-    pickedDate ??= DateTime.now();
 
-    sessionDate.value = pickedDate;
-    sessionDate.notifyListeners();
+    if (pickedDate != null) {
+      sessionDate.value = pickedDate;
+      print('Picked date: $pickedDate');
+    }
   }
 }

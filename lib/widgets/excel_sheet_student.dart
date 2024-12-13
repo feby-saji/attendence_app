@@ -22,6 +22,21 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAbsentStatus();
     });
+
+    // Add a listener to sessionDate to reload students when the date changes
+    sessionDate.addListener(_onSessionDateChange);
+  }
+
+  @override
+  void dispose() {
+    // Remove the listener when the widget is disposed
+    sessionDate.removeListener(_onSessionDateChange);
+    super.dispose();
+  }
+
+  // Listener to reload students when sessionDate changes
+  void _onSessionDateChange() async {
+    await _loadAbsentStatus();
   }
 
   Future<void> _loadAbsentStatus() async {
@@ -41,16 +56,15 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
 
       await Future.delayed(const Duration(milliseconds: 500));
       for (int i = 0; i < allStudents.value.length; i++) {
-        print('how much iteration is this : $i');
         final student = allStudents.value[i];
         print('Student $i: ${student.studentName}, ID: ${student.id}');
 
         if (student.id != null) {
           try {
             updatedAbsentList[i] = await Db().isStudentAbsent(student.id!, sessionDate.value);
-            print('Student ID: ${student.id}, Status: ${updatedAbsentList[i]}');
+            // print('Student ID: ${student.id}, Status: ${updatedAbsentList[i]}');
           } catch (e) {
-            print('Error loading status for student ${student.id}: $e');
+            // print('Error loading status for student ${student.id}: $e');
             updatedAbsentList[i] = false;
           }
         } else {
@@ -80,8 +94,8 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
   }
 
   Future<void> markAttendance(bool absent, int? studentId, int index,
-      [bool goTONextStudent = false]) async {
-    if (studentId == null || !mounted) return;
+      [bool goToNextStudent = false]) async {
+    if (studentId == null || !mounted || isAbsent.value[index] == absent) return;
 
     try {
       List<bool> updatedList = List<bool>.from(isAbsent.value);
@@ -94,8 +108,11 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
       }
 
       if (mounted) {
-        print('just printnig curre $currentInd');
-        if (goTONextStudent) currentInd = (currentInd + 1) % allStudents.value.length;
+        if (goToNextStudent) {
+          setState(() {
+            currentInd = (currentInd + 1) % allStudents.value.length;
+          });
+        }
         setState(() {
           isAbsent.value = updatedList;
           isAbsent.notifyListeners();
@@ -103,7 +120,7 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
       }
     } catch (e) {
       print('Error marking attendance: $e');
-      _loadAbsentStatus();
+      await _loadAbsentStatus(); // Reload status to ensure data consistency
     }
   }
 

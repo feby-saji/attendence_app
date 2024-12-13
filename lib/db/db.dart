@@ -3,6 +3,7 @@ import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/model/absent_student.dart';
 import 'package:student_attendance/model/student.dart';
 import 'package:student_attendance/screens/absent_students.dart';
+import 'package:student_attendance/screens/main_screen.dart';
 import 'package:student_attendance/screens/students_screen.dart';
 
 class Db {
@@ -67,6 +68,8 @@ class Db {
 
   // absent students TABLE
   Future<bool> isStudentAbsent(int studentId, DateTime date) async {
+    print('sesssion date from isStudentAbsent : ${sessionDate.value}');
+
     _db ?? await init();
     String formatedDate = formatDate(date);
 
@@ -75,25 +78,33 @@ class Db {
       where: 'student_id = ? AND date_time = ?',
       whereArgs: [studentId, formatedDate],
     );
+    print(
+        'print student from isStudentAbsent : ${result.first['date_time']},  student:  ${result.first['student_id']},');
+    print('');
+    await printAbsentstudents();
     return result.isNotEmpty;
   }
 
-  getAbsendStudents(DateTime date) async {
+  Future<void> getAbsendStudents(DateTime date) async {
     _db ?? await init();
     String formatedDate = formatDate(date);
 
+    // SQL query to get absent students for the given date
     final result = await _db?.rawQuery('''
-  SELECT $_studentsTable.*
-  FROM $_attendenceTable AS absence
-  INNER JOIN students ON absence.student_id = students.id
-  WHERE absence.date_time = ?
+    SELECT $_studentsTable.*
+    FROM $_attendenceTable AS absence
+    INNER JOIN $_studentsTable ON absence.student_id = $_studentsTable.id
+    WHERE absence.date_time = ?
   ''', [formatedDate]);
 
-    if (result != null || result!.isNotEmpty) {
+    if (result != null && result.isNotEmpty) {
       absentStudents.value.clear();
       for (var element in result) {
         absentStudents.value.add(Student.fromMap(element));
       }
+      absentStudents.notifyListeners();
+    } else {
+      absentStudents.value.clear();
       absentStudents.notifyListeners();
     }
   }
@@ -101,6 +112,8 @@ class Db {
   addAbsentStudent(int id, DateTime date) async {
     _db ?? await init();
     String formatedDate = formatDate(date);
+    print('print date from addAbsentStudent : $formatedDate');
+    print('');
     final result = await _db?.query(_attendenceTable,
         where: 'student_id = ? AND date_time = ?', whereArgs: [id, formatedDate]);
     if (result == null || result.isEmpty) {
