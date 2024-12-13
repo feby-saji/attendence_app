@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/model/absent_student.dart';
@@ -67,6 +68,57 @@ class Db {
   }
 
   // absent students TABLE
+  Future<List<Student>> fetchAttendance(DateTimeRange dateRange, bool showAbsent) async {
+    String startDate = formatDate(dateRange.start);
+    String endDate = formatDate(dateRange.end);
+
+    print('Running query with startDate: $startDate and endDate: $endDate');
+
+    final result = await _db!.rawQuery('''
+    SELECT s.student_name, 
+           s.roll_number, 
+           s.course_name,
+           COUNT(CASE WHEN a.status = 1 THEN 1 END) as days_present,
+           COUNT(CASE WHEN a.status = 0 THEN 1 END) as days_absent,
+           COUNT(*) as total_days
+    FROM $_studentsTable s
+    INNER JOIN $_attendenceTable a ON s.id = a.student_id
+    WHERE a.date_time BETWEEN ? AND ?
+    GROUP BY s.student_name, s.roll_number, s.course_name
+  ''', [startDate, endDate]);
+
+    print('Query result: $result');
+
+    List<Student> filteredStudents = [];
+
+    for (var row in result) {
+      String studentName = row['student_name'] as String;
+      int rollNumber = row['roll_number'] as int;
+      String courseName = row['course_name'] as String;
+      int daysPresent = row['days_present'] as int? ?? 0;
+      int daysAbsent = row['days_absent'] as int? ?? 0;
+      int totalDays = row['total_days'] as int;
+
+      print('Processing student: $studentName');
+      print('daysPresent: $daysPresent, daysAbsent: $daysAbsent, totalDays: $totalDays');
+
+      if (showAbsent && daysAbsent == totalDays) {
+        // If showAbsent is true, add students who are absent for all days
+        print('$studentName is 100% absent');
+        filteredStudents
+            .add(Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+      } else if (!showAbsent && daysPresent == totalDays) {
+        // If showAbsent is false, add students who are present for all days
+        print('$studentName is 100% present');
+        filteredStudents
+            .add(Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+      }
+    }
+
+    print('Filtered students: ${filteredStudents.length}');
+    return filteredStudents;
+  }
+
   Future<bool> isStudentAbsent(int studentId, DateTime date) async {
     print('sesssion date from isStudentAbsent : ${sessionDate.value}');
 
@@ -85,29 +137,29 @@ class Db {
     return result.isNotEmpty;
   }
 
-  Future<void> getAbsendStudents(DateTime date) async {
-    _db ?? await init();
-    String formatedDate = formatDate(date);
+  // Future<void> getAbsendStudents(DateTime date) async {
+  //   _db ?? await init();
+  //   String formatedDate = formatDate(date);
 
-    // SQL query to get absent students for the given date
-    final result = await _db?.rawQuery('''
-    SELECT $_studentsTable.*
-    FROM $_attendenceTable AS absence
-    INNER JOIN $_studentsTable ON absence.student_id = $_studentsTable.id
-    WHERE absence.date_time = ?
-  ''', [formatedDate]);
+  //   // SQL query to get absent students for the given date
+  //   final result = await _db?.rawQuery('''
+  //   SELECT $_studentsTable.*
+  //   FROM $_attendenceTable AS absence
+  //   INNER JOIN $_studentsTable ON absence.student_id = $_studentsTable.id
+  //   WHERE absence.date_time = ?
+  // ''', [formatedDate]);
 
-    if (result != null && result.isNotEmpty) {
-      absentStudents.value.clear();
-      for (var element in result) {
-        absentStudents.value.add(Student.fromMap(element));
-      }
-      absentStudents.notifyListeners();
-    } else {
-      absentStudents.value.clear();
-      absentStudents.notifyListeners();
-    }
-  }
+  //   if (result != null && result.isNotEmpty) {
+  //     absentStudents.value.clear();
+  //     for (var element in result) {
+  //       absentStudents.value.add(Student.fromMap(element));
+  //     }
+  //     absentStudents.notifyListeners();
+  //   } else {
+  //     absentStudents.value.clear();
+  //     absentStudents.notifyListeners();
+  //   }
+  // }
 
   addAbsentStudent(int id, DateTime date) async {
     _db ?? await init();

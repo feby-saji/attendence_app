@@ -36,7 +36,7 @@ class MainScreenState extends State<MainScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(onPressed: () async {
-        await Db().getAbsendStudents(sessionDate.value);
+        // await Db().getAbsendStudents(sessionDate.value);
       }),
       bottomNavigationBar: const NavigationBarWidget(),
     );

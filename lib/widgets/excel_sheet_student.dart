@@ -95,32 +95,35 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
 
   Future<void> markAttendance(bool absent, int? studentId, int index,
       [bool goToNextStudent = false]) async {
-    if (studentId == null || !mounted || isAbsent.value[index] == absent) return;
+    if (studentId == null || !mounted) return;
 
     try {
       List<bool> updatedList = List<bool>.from(isAbsent.value);
-      updatedList[index] = absent;
+      updatedList[index] = absent; // Update the attendance status to the button pressed
 
+      // Perform the database operation to mark as absent or present
       if (absent) {
-        await Db().addAbsentStudent(studentId, sessionDate.value);
+        await Db().addAbsentStudent(studentId, sessionDate.value); // Mark absent in DB
       } else {
-        await Db().removeAbsentStudent(studentId, sessionDate.value);
+        await Db().removeAbsentStudent(studentId, sessionDate.value); // Mark present in DB
       }
 
+      // Update the local list and notify listeners
       if (mounted) {
         if (goToNextStudent) {
           setState(() {
-            currentInd = (currentInd + 1) % allStudents.value.length;
+            currentInd = (currentInd + 1) % allStudents.value.length; // Go to the next student
           });
         }
+
         setState(() {
-          isAbsent.value = updatedList;
-          isAbsent.notifyListeners();
+          isAbsent.value = updatedList; // Update the attendance status list
+          isAbsent.notifyListeners(); // Notify listeners about status change
         });
       }
     } catch (e) {
       print('Error marking attendance: $e');
-      await _loadAbsentStatus(); // Reload status to ensure data consistency
+      await _loadAbsentStatus(); // Reload the status in case of error
     }
   }
 
@@ -183,17 +186,13 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: <Widget>[
                   ElevatedButton(
-                    onPressed: allStudents.value.isNotEmpty
-                        ? () => markAttendance(
-                            false, allStudents.value[currentInd].id, currentInd, true)
-                        : null,
+                    onPressed: () =>
+                        markAttendance(false, allStudents.value[currentInd].id, currentInd, true),
                     child: const Text('Present'),
                   ),
                   ElevatedButton(
-                    onPressed: allStudents.value.isNotEmpty
-                        ? () =>
-                            markAttendance(true, allStudents.value[currentInd].id, currentInd, true)
-                        : null,
+                    onPressed: () =>
+                        markAttendance(true, allStudents.value[currentInd].id, currentInd, true),
                     child: const Text('Absent'),
                   ),
                 ],
