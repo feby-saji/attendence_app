@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:student_attendance/db/db.dart';
+import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/screens/absent_students.dart';
 import 'package:student_attendance/screens/students_screen.dart';
 import 'package:student_attendance/widgets/bottom_nav.dart';
@@ -51,7 +52,15 @@ class MainScreenState extends State<MainScreen> {
 
     if (pickedDate != null) {
       sessionDate.value = pickedDate;
+      sessionDate.notifyListeners();
       print('Picked date: $pickedDate');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Selected Date: ${formatDate(sessionDate.value)}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 }
