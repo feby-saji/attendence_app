@@ -3,20 +3,25 @@ class StudentAttendence {
   int studentId;
   bool attendenceStatus;
 
-  StudentAttendence({required this.date, required this.studentId, required this.attendenceStatus});
+  StudentAttendence({
+    required this.date,
+    required this.studentId,
+    required this.attendenceStatus,
+  });
 
   Map<String, dynamic> toMap() {
     return {
       'date_time': date,
-      'student_id ': studentId,
-      'status': attendenceStatus == true ? 0 : 1,
+      'student_id': studentId, // Removed extra space after student_id
+      'status': attendenceStatus ? 1 : 0, // 1 for present (true), 0 for absent (false)
     };
   }
 
-  fromMap(Map<String, dynamic> map) {
+  StudentAttendence fromMap(Map<String, dynamic> map) {
     return StudentAttendence(
-        date: map['date'],
-        studentId: map['studentId'],
-        attendenceStatus: map['status'] == 0 ? true : false);
+      date: map['date_time'],
+      studentId: map['student_id'],
+      attendenceStatus: map['status'] == 1, // 1 means present (true), 0 means absent (false)
+    );
   }
 }

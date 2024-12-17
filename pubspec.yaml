@@ -34,8 +34,8 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_native_splash: ^2.4.3
+  shared_preferences: ^2.3.3
   sqflite: ^2.4.1
-
 
 dev_dependencies:
   flutter_lints: ^4.0.0
@@ -43,12 +43,11 @@ dev_dependencies:
     sdk: flutter
 
 flutter_native_splash:
-  color: "#42a5f5"  # Set a solid background color for the splash screen
-  branding_bottom_padding: 24  # Padding from the bottom of the screen for branding image
+  color: "#42a5f5" # Set a solid background color for the splash screen
+  branding_bottom_padding: 24 # Padding from the bottom of the screen for branding image
   android_12:
-    color: "#42a5f5"  # Background color for Android 12+
-    icon_background_color: "#111111"  # Background color for the icon
-
+    color: "#42a5f5" # Background color for Android 12+
+    icon_background_color: "#111111" # Background color for the icon
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

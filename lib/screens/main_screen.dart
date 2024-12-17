@@ -26,7 +26,14 @@ class MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: const Text('Attendance App'),
         actions: [
-          IconButton(onPressed: () => datePciker(context), icon: const Icon(Icons.date_range))
+          ValueListenableBuilder(
+              valueListenable: currentPageIndex,
+              builder: (context, value, child) {
+                return Visibility(
+                    visible: currentPageIndex.value == 0,
+                    child: IconButton(
+                        onPressed: () => datePciker(context), icon: const Icon(Icons.date_range)));
+              })
         ],
       ),
       body: ValueListenableBuilder(
@@ -35,9 +42,9 @@ class MainScreenState extends State<MainScreen> {
           return _screens[currentPageIndex.value];
         },
       ),
-      floatingActionButton: FloatingActionButton(onPressed: () async {
-        // await Db().getAbsendStudents(sessionDate.value);
-      }),
+      // floatingActionButton: FloatingActionButton(onPressed: () async {
+      //   await Db().printAbsentStudents();
+      // }),
       bottomNavigationBar: const NavigationBarWidget(),
     );
   }

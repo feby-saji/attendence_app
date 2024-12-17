@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:student_attendance/db/db.dart';
+import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/screens/main_screen.dart';
 import 'package:student_attendance/screens/students_screen.dart';
 
@@ -19,22 +21,48 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
   void initState() {
     super.initState();
     isAbsent.value = [];
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadAbsentStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadAbsentStatus();
+
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      String todayDate = formatDate(DateTime.now());
+      // await prefs.remove(todayDate);
+
+      if (prefs.getString(todayDate) == null) {
+        // null means no date present, so run addAllStudentsAsPresent
+        await addAllStudentsAsPresent(todayDate);
+
+        await prefs.setString(todayDate, todayDate);
+      } else {
+        // Compare the current date with the stored date in SharedPreferences
+        String? storedDate = prefs.getString(todayDate);
+        if (storedDate != null && storedDate != todayDate) {
+          // If the stored date is different from today's date, run addAllStudentsAsPresent
+          await addAllStudentsAsPresent(todayDate);
+          await prefs.setString(todayDate, todayDate);
+        }
+      }
     });
 
-    // Add a listener to sessionDate to reload students when the date changes
     sessionDate.addListener(_onSessionDateChange);
+  }
+
+  Future<void> addAllStudentsAsPresent(String todayDate) async {
+    if (allStudents.value.isNotEmpty) {
+      for (var student in allStudents.value) {
+        if (student.id != null) {
+          await Db().addAllStudentsAsPresent(student.id!, todayDate);
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
-    // Remove the listener when the widget is disposed
     sessionDate.removeListener(_onSessionDateChange);
     super.dispose();
   }
 
-  // Listener to reload students when sessionDate changes
   void _onSessionDateChange() async {
     await _loadAbsentStatus();
   }
@@ -52,7 +80,8 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
 
       print('Total students: ${allStudents.value.length}');
 
-      List<bool> updatedAbsentList = List<bool>.filled(allStudents.value.length, false);
+      List<bool> updatedAbsentList =
+          List<bool>.filled(allStudents.value.length, true); // Default to present (true)
 
       await Future.delayed(const Duration(milliseconds: 500));
       for (int i = 0; i < allStudents.value.length; i++) {
@@ -61,11 +90,11 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
 
         if (student.id != null) {
           try {
-            updatedAbsentList[i] = await Db().isStudentAbsent(student.id!, sessionDate.value);
-            // print('Student ID: ${student.id}, Status: ${updatedAbsentList[i]}');
+            bool isAbsentStatus = await Db().isStudentAbsent(student.id!, sessionDate.value);
+            updatedAbsentList[i] =
+                !isAbsentStatus; // If absent is true, set the list to false (present)
           } catch (e) {
-            // print('Error loading status for student ${student.id}: $e');
-            updatedAbsentList[i] = false;
+            updatedAbsentList[i] = true; // Default to present in case of error
           }
         } else {
           print('Student at index $i has a null ID');
@@ -99,31 +128,28 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
 
     try {
       List<bool> updatedList = List<bool>.from(isAbsent.value);
-      updatedList[index] = absent; // Update the attendance status to the button pressed
+      updatedList[index] = absent; // Update attendance status (true = present, false = absent)
 
-      // Perform the database operation to mark as absent or present
       if (absent) {
-        await Db().addAbsentStudent(studentId, sessionDate.value); // Mark absent in DB
+        await Db().markPresent(studentId, sessionDate.value); // Mark present in DB
       } else {
-        await Db().removeAbsentStudent(studentId, sessionDate.value); // Mark present in DB
+        await Db().markAbsent(studentId, sessionDate.value); // Mark absent in DB
       }
 
-      // Update the local list and notify listeners
       if (mounted) {
         if (goToNextStudent) {
           setState(() {
-            currentInd = (currentInd + 1) % allStudents.value.length; // Go to the next student
+            currentInd = (currentInd + 1) % allStudents.value.length;
           });
         }
 
         setState(() {
-          isAbsent.value = updatedList; // Update the attendance status list
-          isAbsent.notifyListeners(); // Notify listeners about status change
+          isAbsent.value = updatedList;
         });
       }
     } catch (e) {
       print('Error marking attendance: $e');
-      await _loadAbsentStatus(); // Reload the status in case of error
+      await _loadAbsentStatus();
     }
   }
 
@@ -161,7 +187,7 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
                         title: Text(student.studentName),
                         subtitle: Text(student.courseName),
                         trailing: Switch(
-                          value: absentList[index],
+                          value: absentList[index], // true = present, false = absent
                           onChanged: (bool value) async {
                             if (student.id != null) {
                               await markAttendance(value, student.id, index);
@@ -187,12 +213,12 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
                 children: <Widget>[
                   ElevatedButton(
                     onPressed: () =>
-                        markAttendance(false, allStudents.value[currentInd].id, currentInd, true),
+                        markAttendance(true, allStudents.value[currentInd].id, currentInd, true),
                     child: const Text('Present'),
                   ),
                   ElevatedButton(
                     onPressed: () =>
-                        markAttendance(true, allStudents.value[currentInd].id, currentInd, true),
+                        markAttendance(false, allStudents.value[currentInd].id, currentInd, true),
                     child: const Text('Absent'),
                   ),
                 ],

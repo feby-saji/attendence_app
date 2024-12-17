@@ -12,17 +12,23 @@ class AbsentStudentsScreen extends StatefulWidget {
   State<AbsentStudentsScreen> createState() => _AbsentStudentsScreenState();
 }
 
+enum Choice {
+  fullPresent,
+  fullAbsent,
+  absentStudents,
+}
+
 class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
-  bool showAbsent = true;
+  Choice? _choice = Choice.absentStudents;
 
   @override
   void initState() {
-    _fetchFilteredStudents();
+    // _fetchFilteredStudents();
     super.initState();
   }
 
   Future<void> _fetchFilteredStudents() async {
-    print('printing running _fetchFilteredStudents function');
+    print('Running _fetchFilteredStudents function');
     if (selectedDateRange == null) {
       DateTime now = DateTime.now();
       selectedDateRange = DateTimeRange(
@@ -30,18 +36,29 @@ class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
         end: now,
       );
     }
-    List<Student> students = await Db().fetchAttendance(
-      selectedDateRange!,
-      showAbsent,
-    );
-    print('Fetched students: ${students.length}');
-    filteredStudents.value = students;
+
+    if (_choice == Choice.absentStudents) {
+      // Fetch absences from the database
+      //  filteredStudents = await Db().fetchAbsences(
+      //   selectedDateRange!.start,
+      //   selectedDateRange!.end,
+      // );
+      // print('Fetched absences: ${absences.length}');
+      // filteredAbsences.value = absences;
+    } else {
+      List<Student> students = await Db().fetchAttendance(
+        selectedDateRange!,
+        _choice!,
+      );
+      print('Fetched students: ${students.length}');
+      filteredStudents.value = students;
+    }
   }
 
   Future<void> _pickDateRange(BuildContext context) async {
     final DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      firstDate: DateTime.now().subtract(const Duration(days: 1000)),
       lastDate: DateTime.now(),
     );
 
@@ -55,37 +72,36 @@ class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Chip selection and Date Range Picker
+        // Dropdown and Date Range Picker
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Row(
             children: [
-              ChoiceChip(
-                label: const Text('100% Absent'),
-                selected: showAbsent,
-                onSelected: (selected) {
-                  if (!showAbsent) {
+              Expanded(
+                child: DropdownButton<Choice>(
+                  isExpanded: true,
+                  value: _choice,
+                  items: Choice.values.map((choice) {
+                    return DropdownMenuItem<Choice>(
+                      value: choice,
+                      child: Text(
+                        choice == Choice.fullAbsent
+                            ? '100% Absent'
+                            : choice == Choice.fullPresent
+                                ? '100% Present'
+                                : 'Absent Students',
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (selectedChoice) {
                     setState(() {
-                      showAbsent = true;
+                      _choice = selectedChoice;
                     });
                     _fetchFilteredStudents();
-                  }
-                },
+                  },
+                  hint: const Text('Select a filter'),
+                ),
               ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: const Text('100% Present'),
-                selected: !showAbsent,
-                onSelected: (selected) {
-                  if (showAbsent) {
-                    setState(() {
-                      showAbsent = false;
-                    });
-                    _fetchFilteredStudents();
-                  }
-                },
-              ),
-              const Spacer(),
               IconButton(
                 icon: const Icon(Icons.date_range),
                 onPressed: () => _pickDateRange(context),

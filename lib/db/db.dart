@@ -17,19 +17,20 @@ class Db {
   Database? _db;
 
   Future<void> init() async {
-    print('printing init()');
+    print('Printing init()');
     _db = await openDatabase('my_db.db', version: 1, onCreate: (Database db, int version) async {
-      // is_present :  0 for false, 1 for true
+      // is_present:  0 for false, 1 for true
       await db.execute(
         'CREATE TABLE $_studentsTable (id INTEGER PRIMARY KEY, student_name TEXT, roll_number INTEGER, course_name TEXT)',
       );
       await db.execute(
-        'CREATE TABLE $_attendenceTable (date_time Text, status INTEGER NOT NULL DEFAULT 0, student_id INTEGER, FOREIGN KEY (student_id) REFERENCES $_studentsTable(id))',
+        'CREATE TABLE $_attendenceTable (date_time TEXT, status INTEGER NOT NULL DEFAULT 0, student_id INTEGER, FOREIGN KEY (student_id) REFERENCES $_studentsTable(id))',
       );
     });
   }
 
-  loadAllStudents() async {
+  // Load all students and notify listeners (if using a listener-based state management)
+  Future<void> loadAllStudents() async {
     if (!await checkTableEmpty()) {
       allStudents.value.clear();
       List<Map<String, dynamic>> studentMap = await _db!.query(_studentsTable);
@@ -41,23 +42,19 @@ class Db {
     }
   }
 
-  Future<List<Student>> getData() async {
-    if (!await checkTableEmpty()) {
-      List<Map<String, dynamic>> studentMap = await _db!.query(_studentsTable);
-
-      return List.generate(studentMap.length, (i) {
-        return Student.fromMap(studentMap[i]);
-      });
-    }
-    print('returning empty list  from getData');
-    return [];
+  Future<List<Student>> getAllStudents() async {
+    if (await checkTableEmpty()) return [];
+    List<Map<String, dynamic>> studentMap = await _db!.query(_studentsTable);
+    return studentMap.map((student) => Student.fromMap(student)).toList();
   }
 
   Future<int> saveStudent(Student student) async {
-    print('saving data');
-    int id = await _db!
-        .insert(_studentsTable, student.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-    print('checkTableEmpty : ${checkTableEmpty()}');
+    print('Saving student data');
+    int id = await _db!.insert(
+      _studentsTable,
+      student.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     return id;
   }
 
@@ -67,13 +64,46 @@ class Db {
     return count == 0;
   }
 
-  // absent students TABLE
-  Future<List<Student>> fetchAttendance(DateTimeRange dateRange, bool showAbsent) async {
+// ATTENDENCE table
+
+  //this functino runs daily once(adding all students to DB as present)
+  addAllStudentsAsPresent(int studentId, String formattedDate) async {
+    _db ?? await init();
+
+    await _db!.transaction((txn) async {
+      final result = await txn.query(
+        _attendenceTable,
+        where: 'student_id = ? AND date_time = ?',
+        whereArgs: [studentId, formattedDate],
+      );
+
+      if (result.isEmpty) {
+        // Add absence if not already present
+        StudentAttendence studentAttendance = StudentAttendence(
+          date: formattedDate,
+          studentId: studentId,
+          attendenceStatus: true, // true means present
+        );
+
+        await txn.insert(
+          _attendenceTable,
+          studentAttendance.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        print('present record added for studentId: $studentId on date: $formattedDate');
+      } else {
+        print('Attendance already recorded for studentId: $studentId on date: $formattedDate');
+      }
+    });
+  }
+
+  Future<List<Student>> fetchAttendance(DateTimeRange dateRange, Choice choice) async {
     String startDate = formatDate(dateRange.start);
     String endDate = formatDate(dateRange.end);
 
     print('Running query with startDate: $startDate and endDate: $endDate');
 
+    // Run raw query to fetch student attendance data
     final result = await _db!.rawQuery('''
     SELECT s.student_name, 
            s.roll_number, 
@@ -87,7 +117,7 @@ class Db {
     GROUP BY s.student_name, s.roll_number, s.course_name
   ''', [startDate, endDate]);
 
-    print('Query result: $result');
+    print('Query result: ${result.length} rows retrieved.');
 
     List<Student> filteredStudents = [];
 
@@ -99,19 +129,21 @@ class Db {
       int daysAbsent = row['days_absent'] as int? ?? 0;
       int totalDays = row['total_days'] as int;
 
-      print('Processing student: $studentName');
-      print('daysPresent: $daysPresent, daysAbsent: $daysAbsent, totalDays: $totalDays');
+      print('Processing student: $studentName, Roll Number: $rollNumber');
+      print('Days Present: $daysPresent, Days Absent: $daysAbsent, Total Days: $totalDays');
 
-      if (showAbsent && daysAbsent == totalDays) {
-        // If showAbsent is true, add students who are absent for all days
-        print('$studentName is 100% absent');
-        filteredStudents
-            .add(Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
-      } else if (!showAbsent && daysPresent == totalDays) {
-        // If showAbsent is false, add students who are present for all days
-        print('$studentName is 100% present');
-        filteredStudents
-            .add(Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+      if (choice == Choice.fullAbsent) {
+        if (daysAbsent == totalDays && totalDays > 0) {
+          print('$studentName is absent for all days');
+          filteredStudents.add(
+              Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+        }
+      } else {
+        if (daysPresent == totalDays && totalDays > 0) {
+          print('$studentName is present for all days');
+          filteredStudents.add(
+              Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+        }
       }
     }
 
@@ -119,100 +151,134 @@ class Db {
     return filteredStudents;
   }
 
+// TODO
   Future<bool> isStudentAbsent(int studentId, DateTime date) async {
-    print('sesssion date from isStudentAbsent : ${sessionDate.value}');
-
-    _db ?? await init();
-    String formatedDate = formatDate(date);
+    String formattedDate = formatDate(date);
 
     final result = await _db!.query(
       _attendenceTable,
       where: 'student_id = ? AND date_time = ?',
-      whereArgs: [studentId, formatedDate],
+      whereArgs: [studentId, formattedDate],
     );
-    print(
-        'print student from isStudentAbsent : ${result.first['date_time']},  student:  ${result.first['student_id']},');
-    print('');
-    await printAbsentstudents();
-    return result.isNotEmpty;
-  }
+    print('isStudentAbsent : ${result.first['status']} , ${result.first['student_id']}');
 
-  // Future<void> getAbsendStudents(DateTime date) async {
-  //   _db ?? await init();
-  //   String formatedDate = formatDate(date);
-
-  //   // SQL query to get absent students for the given date
-  //   final result = await _db?.rawQuery('''
-  //   SELECT $_studentsTable.*
-  //   FROM $_attendenceTable AS absence
-  //   INNER JOIN $_studentsTable ON absence.student_id = $_studentsTable.id
-  //   WHERE absence.date_time = ?
-  // ''', [formatedDate]);
-
-  //   if (result != null && result.isNotEmpty) {
-  //     absentStudents.value.clear();
-  //     for (var element in result) {
-  //       absentStudents.value.add(Student.fromMap(element));
-  //     }
-  //     absentStudents.notifyListeners();
-  //   } else {
-  //     absentStudents.value.clear();
-  //     absentStudents.notifyListeners();
-  //   }
-  // }
-
-  addAbsentStudent(int id, DateTime date) async {
-    _db ?? await init();
-    String formatedDate = formatDate(date);
-    print('print date from addAbsentStudent : $formatedDate');
-    print('');
-    final result = await _db?.query(_attendenceTable,
-        where: 'student_id = ? AND date_time = ?', whereArgs: [id, formatedDate]);
-    if (result == null || result.isEmpty) {
-      StudentAttendence student =
-          StudentAttendence(date: formatedDate, studentId: id, attendenceStatus: false);
-      await _db?.insert(
-        _attendenceTable,
-        student.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+    if (result.isNotEmpty) {
+      // 'status'  0 = absent, 1 = present
+      var status = result.first['status'];
+      return status == 0;
+    } else {
+      // No record means the student was not absent on this date (assumed present)
+      return false;
     }
   }
 
-  removeAbsentStudent(int id, DateTime date) async {
+  // Add or update absence as absent for a student on a specific date
+  Future<void> markAbsent(int studentId, DateTime date) async {
     _db ?? await init();
-    String formatedDate = formatDate(date);
+    String formattedDate = formatDate(date);
 
-    // Delete record where student_id and date_time match
-    int? deletedId = await _db?.delete(
-      _attendenceTable,
-      where: 'student_id = ? AND date_time = ?',
-      whereArgs: [id, formatedDate],
-    );
+    await _db!.transaction((txn) async {
+      final result = await txn.query(
+        _attendenceTable,
+        where: 'student_id = ? AND date_time = ?',
+        whereArgs: [studentId, formattedDate],
+      );
 
-    print('Deleted: ${deletedId ?? 'Nothing deleted'}');
+      if (result.isEmpty) {
+        // Add student as absence since the student desnt exist
+        StudentAttendence studentAttendance = StudentAttendence(
+          date: formattedDate,
+          studentId: studentId,
+          attendenceStatus: false, // False means absent
+        );
+
+        // Insert attendance record
+        await txn.insert(
+          _attendenceTable,
+          studentAttendance.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        print('Absent record added for studentId: $studentId on date: $formattedDate');
+      } else {
+        await txn.update(
+          _attendenceTable,
+          {'status': 0}, // // 1 for present (true), 0 for absent (false)
+          where: 'student_id = ? AND date_time = ?',
+          whereArgs: [studentId, formattedDate],
+        );
+        // print('Attendance already recorded for studentId: $studentId on date: $formattedDate');
+      }
+    });
   }
 
-// PRINT TABLES
+  // Add or update absence as present for a student on a specific date
+  Future<void> markPresent(int studentId, DateTime date) async {
+    _db ?? await init();
+    String formattedDate = formatDate(date);
+
+    await _db!.transaction((txn) async {
+      final result = await txn.query(
+        _attendenceTable,
+        where: 'student_id = ? AND date_time = ?',
+        whereArgs: [studentId, formattedDate],
+      );
+
+      if (result.isEmpty) {
+        // Add rpresent student
+        StudentAttendence studentAttendance = StudentAttendence(
+          date: formattedDate,
+          studentId: studentId,
+          attendenceStatus: true, //
+        );
+
+        await txn.insert(
+          _attendenceTable,
+          studentAttendance.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        print('present record added for studentId: $studentId on date: $formattedDate');
+      } else {
+        await txn.update(
+          _attendenceTable,
+          {'status': 1}, // 1 for present (true), 0 for absent (false)
+          where: 'student_id = ? AND date_time = ?',
+          whereArgs: [studentId, formattedDate],
+        );
+        // print('Attendance already recorded for studentId: $studentId on date: $formattedDate');
+      }
+    });
+  }
+
+  Future<void> deleteAllData() async {
+    _db ?? await init();
+
+    // Begin the transaction
+    await _db!.transaction((txn) async {
+      await txn.delete(
+        _attendenceTable, // Table name
+      );
+      print('All data deleted from $_attendenceTable');
+    });
+  }
+
+  // Print Students Table
   Future<void> printStudents() async {
     if (_db != null) {
       List<Map<String, dynamic>> students = await _db!.query(_studentsTable);
-
-      // Print each row to the console
       for (var student in students) {
         print(
-            'Student ID: ${student['id']}, Name: ${student['name']}, Roll No: ${student['rollNumber']}');
+            'Student ID: ${student['id']}, Name: ${student['student_name']}, Roll No: ${student['roll_number']}');
       }
     }
   }
 
-  Future<void> printAbsentstudents() async {
+  // Print Absence Table
+  Future<void> printAbsentStudents() async {
     if (_db != null) {
       List<Map<String, dynamic>> students = await _db!.query(_attendenceTable);
-
-      // Print each row to the console
       for (var student in students) {
-        print('date_time ID: ${student['date_time']}, student_id: ${student['student_id']}, ');
+        print(
+            'Date: ${student['date_time']}, Student ID: ${student['student_id']}, Status: ${student['status']}');
       }
     }
   }

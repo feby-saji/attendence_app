@@ -22,6 +22,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
     // Initial load ofa all students
     Db().loadAllStudents();
+    // Db().deleteAllData();
   }
 
   @override
