@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:student_attendance/db/db.dart';
-import 'package:student_attendance/model/student.dart';
+import 'package:student_attendance/model/absent_student.dart';
 
-ValueNotifier<List<Student>> filteredStudents = ValueNotifier<List<Student>>([]);
+ValueNotifier<List<AbsentStudent>> filteredStudents = ValueNotifier<List<AbsentStudent>>([]);
 DateTimeRange? selectedDateRange;
 
 class AbsentStudentsScreen extends StatefulWidget {
@@ -19,11 +19,11 @@ enum Choice {
 }
 
 class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
-  Choice? _choice = Choice.absentStudents;
+  Choice? _choice = Choice.fullPresent;
 
   @override
   void initState() {
-    // _fetchFilteredStudents();
+    _fetchFilteredStudents();
     super.initState();
   }
 
@@ -39,19 +39,18 @@ class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
 
     if (_choice == Choice.absentStudents) {
       // Fetch absences from the database
-      //  filteredStudents = await Db().fetchAbsences(
-      //   selectedDateRange!.start,
-      //   selectedDateRange!.end,
-      // );
-      // print('Fetched absences: ${absences.length}');
-      // filteredAbsences.value = absences;
+      filteredStudents.value = await Db().fetchAttendance(
+        selectedDateRange!,
+        _choice!,
+      );
     } else {
-      List<Student> students = await Db().fetchAttendance(
+      List<AbsentStudent> students = await Db().fetchAttendance(
         selectedDateRange!,
         _choice!,
       );
       print('Fetched students: ${students.length}');
       filteredStudents.value = students;
+      filteredStudents.notifyListeners();
     }
   }
 
@@ -113,17 +112,19 @@ class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
         Expanded(
           child: ValueListenableBuilder(
             valueListenable: filteredStudents,
-            builder: (context, List<Student> students, _) {
+            builder: (context, List<AbsentStudent> students, _) {
               if (students.isEmpty) {
                 return const Center(child: Text('No students found for the selected filter.'));
               }
               return ListView.builder(
                 itemCount: students.length,
                 itemBuilder: (context, index) {
-                  Student student = students[index];
+                  AbsentStudent student = students[index];
                   return ListTile(
                     title: Text(student.studentName),
-                    subtitle: Text('Roll: ${student.rollNumber}, Course: ${student.courseName}'),
+                    subtitle: student.date != null
+                        ? Text('Roll: ${student.rollNumber}, Date: ${student.date}')
+                        : Text('Roll: ${student.rollNumber}'),
                   );
                 },
               );

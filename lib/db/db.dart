@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/model/absent_student.dart';
 import 'package:student_attendance/model/student.dart';
+import 'package:student_attendance/model/student_attendence.dart';
 import 'package:student_attendance/screens/absent_students.dart';
 import 'package:student_attendance/screens/main_screen.dart';
 import 'package:student_attendance/screens/students_screen.dart';
@@ -97,14 +98,26 @@ class Db {
     });
   }
 
-  Future<List<Student>> fetchAttendance(DateTimeRange dateRange, Choice choice) async {
+  Future<List<AbsentStudent>> fetchAttendance(DateTimeRange dateRange, Choice choice) async {
     String startDate = formatDate(dateRange.start);
     String endDate = formatDate(dateRange.end);
 
     print('Running query with startDate: $startDate and endDate: $endDate');
 
     // Run raw query to fetch student attendance data
-    final result = await _db!.rawQuery('''
+    late final List<Map<String, Object?>> result;
+    if (choice == Choice.absentStudents) {
+      result = await _db!.rawQuery('''
+    SELECT s.student_name, 
+           s.roll_number, 
+           s.course_name,
+           a.date_time AS absent_date
+    FROM $_studentsTable s
+    INNER JOIN $_attendenceTable a ON s.id = a.student_id
+    WHERE a.status = 0 AND a.date_time BETWEEN ? AND ?
+    ''', [startDate, endDate]);
+    } else {
+      result = await _db!.rawQuery('''
     SELECT s.student_name, 
            s.roll_number, 
            s.course_name,
@@ -116,33 +129,63 @@ class Db {
     WHERE a.date_time BETWEEN ? AND ?
     GROUP BY s.student_name, s.roll_number, s.course_name
   ''', [startDate, endDate]);
-
+    }
     print('Query result: ${result.length} rows retrieved.');
 
-    List<Student> filteredStudents = [];
+    List<AbsentStudent> filteredStudents = [];
 
     for (var row in result) {
+      print('Row data: $row'); // Print each row to debug
+
       String studentName = row['student_name'] as String;
       int rollNumber = row['roll_number'] as int;
       String courseName = row['course_name'] as String;
+
+      // Use safe casting with default values for days_present, days_absent, and total_days
       int daysPresent = row['days_present'] as int? ?? 0;
       int daysAbsent = row['days_absent'] as int? ?? 0;
-      int totalDays = row['total_days'] as int;
+      int totalDays = row['total_days'] as int? ?? 0; // Provide fallback to 0 if null
 
-      print('Processing student: $studentName, Roll Number: $rollNumber');
       print('Days Present: $daysPresent, Days Absent: $daysAbsent, Total Days: $totalDays');
 
-      if (choice == Choice.fullAbsent) {
-        if (daysAbsent == totalDays && totalDays > 0) {
-          print('$studentName is absent for all days');
+      if (choice == Choice.absentStudents) {
+        // Ensure 'absent_date' exists and cast it correctly
+        if (row.containsKey('absent_date')) {
+          String absentDate = row['absent_date'] as String;
+          print('Processing absent student: $studentName, absent on: $absentDate');
           filteredStudents.add(
-              Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+            AbsentStudent(
+              date: absentDate,
+              studentName: studentName,
+              rollNumber: rollNumber,
+              courseName: courseName,
+            ),
+          );
+        } else {
+          print('Absent date not found for $studentName');
         }
       } else {
-        if (daysPresent == totalDays && totalDays > 0) {
+        // Handle the logic for 'fullAbsent' and other choices
+        if (choice == Choice.fullAbsent && daysAbsent == totalDays && totalDays > 0) {
+          print('$studentName is absent for all days');
+          filteredStudents.add(
+            AbsentStudent(
+              date: 'date',
+              studentName: studentName,
+              rollNumber: rollNumber,
+              courseName: courseName,
+            ),
+          );
+        } else if (daysPresent == totalDays && totalDays > 0) {
           print('$studentName is present for all days');
           filteredStudents.add(
-              Student(studentName: studentName, rollNumber: rollNumber, courseName: courseName));
+            AbsentStudent(
+              date: 'date',
+              studentName: studentName,
+              rollNumber: rollNumber,
+              courseName: courseName,
+            ),
+          );
         }
       }
     }
