@@ -23,38 +23,9 @@ class _ExcelSheetStudentsState extends State<ExcelSheetStudents> {
     isAbsent.value = [];
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadAbsentStatus();
-
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      String todayDate = formatDate(DateTime.now());
-      // await prefs.remove(todayDate);
-
-      if (prefs.getString(todayDate) == null) {
-        // null means no date present, so run addAllStudentsAsPresent
-        await addAllStudentsAsPresent(todayDate);
-
-        await prefs.setString(todayDate, todayDate);
-      } else {
-        // Compare the current date with the stored date in SharedPreferences
-        String? storedDate = prefs.getString(todayDate);
-        if (storedDate != null && storedDate != todayDate) {
-          // If the stored date is different from today's date, run addAllStudentsAsPresent
-          await addAllStudentsAsPresent(todayDate);
-          await prefs.setString(todayDate, todayDate);
-        }
-      }
     });
 
     sessionDate.addListener(_onSessionDateChange);
-  }
-
-  Future<void> addAllStudentsAsPresent(String todayDate) async {
-    if (allStudents.value.isNotEmpty) {
-      for (var student in allStudents.value) {
-        if (student.id != null) {
-          await Db().addAllStudentsAsPresent(student.id!, todayDate);
-        }
-      }
-    }
   }
 
   @override

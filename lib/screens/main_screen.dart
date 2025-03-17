@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:student_attendance/db/db.dart';
 import 'package:student_attendance/functions/formate_date.dart';
 import 'package:student_attendance/screens/absent_students.dart';
@@ -17,7 +18,7 @@ class MainScreen extends StatefulWidget {
 class MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const StudentsScreen(),
-    const AbsentStudentsScreen(),
+    const AttendanceScreen(),
   ];
 
   @override
@@ -42,9 +43,11 @@ class MainScreenState extends State<MainScreen> {
           return _screens[currentPageIndex.value];
         },
       ),
-      // floatingActionButton: FloatingActionButton(onPressed: () async {
-      //   await Db().printAbsentStudents();
-      // }),
+      floatingActionButton: FloatingActionButton(onPressed: () async {
+        var databasesPath = await getDatabasesPath();
+
+        print(databasesPath);
+      }),
       bottomNavigationBar: const NavigationBarWidget(),
     );
   }

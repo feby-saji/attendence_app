@@ -1,31 +1,26 @@
 class AbsentStudent {
-  String studentName;
-  int rollNumber;
-  String courseName;
-  String? date;
+  final int id;
+  final String studentName;
+  final int rollNumber;
+  final String courseName;
+  final String date; // Store the absent date
 
   AbsentStudent({
-    this.date,
+    required this.id,
+    required this.studentName,
     required this.rollNumber,
     required this.courseName,
-    required this.studentName,
+    required this.date,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'date_time': date,
-      'student_name': studentName,
-      'roll_number': rollNumber,
-      'course_name': courseName,
-    };
-  }
-
-  AbsentStudent fromMap(Map<String, dynamic> map) {
+  // Factory constructor to convert map to AbsentStudent
+  factory AbsentStudent.fromMap(Map<String, dynamic> map) {
     return AbsentStudent(
-      date: map['date_time'],
+      id: map['id'],
       studentName: map['student_name'],
       rollNumber: map['roll_number'],
       courseName: map['course_name'],
+      date: map['absent_date'], // Ensure it's correctly parsed
     );
   }
 }

@@ -1,137 +1,237 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // Ensure you have this import
 import 'package:student_attendance/db/db.dart';
+import 'package:student_attendance/model/student.dart';
 import 'package:student_attendance/model/absent_student.dart';
 
-ValueNotifier<List<AbsentStudent>> filteredStudents = ValueNotifier<List<AbsentStudent>>([]);
-DateTimeRange? selectedDateRange;
-
-class AbsentStudentsScreen extends StatefulWidget {
-  const AbsentStudentsScreen({super.key});
+class AttendanceScreen extends StatefulWidget {
+  const AttendanceScreen({super.key});
 
   @override
-  State<AbsentStudentsScreen> createState() => _AbsentStudentsScreenState();
+  AttendanceScreenState createState() => AttendanceScreenState();
 }
 
-enum Choice {
-  fullPresent,
-  fullAbsent,
-  absentStudents,
-}
-
-class _AbsentStudentsScreenState extends State<AbsentStudentsScreen> {
-  Choice? _choice = Choice.fullPresent;
+class AttendanceScreenState extends State<AttendanceScreen> {
+  DateTimeRange? _selectedDateRange;
+  List<Student> _students = [];
+  List<AbsentStudent> _absentStudents = [];
+  List<AbsentStudent> _100PercentAbsent = [];
+  List<AbsentStudent> _100PercentPresent = [];
+  bool _isLoading = false;
+  String _selectedOutput = 'Absent Students';
 
   @override
   void initState() {
-    _fetchFilteredStudents();
     super.initState();
+    _setDefaultDateRange(); // Set default date range
+    _loadStudents();
   }
 
-  Future<void> _fetchFilteredStudents() async {
-    print('Running _fetchFilteredStudents function');
-    if (selectedDateRange == null) {
-      DateTime now = DateTime.now();
-      selectedDateRange = DateTimeRange(
-        start: now.subtract(const Duration(days: 7)),
-        end: now,
-      );
-    }
-
-    if (_choice == Choice.absentStudents) {
-      // Fetch absences from the database
-      filteredStudents.value = await Db().fetchAttendance(
-        selectedDateRange!,
-        _choice!,
-      );
-    } else {
-      List<AbsentStudent> students = await Db().fetchAttendance(
-        selectedDateRange!,
-        _choice!,
-      );
-      print('Fetched students: ${students.length}');
-      filteredStudents.value = students;
-      filteredStudents.notifyListeners();
-    }
+  // Set a default date range of 1 week
+  void _setDefaultDateRange() {
+    DateTime now = DateTime.now();
+    DateTime start = now.subtract(const Duration(days: 7));
+    DateTime end = now;
+    setState(() {
+      _selectedDateRange = DateTimeRange(start: start, end: end);
+    });
+    // Fetch attendance data for the default range
+    _fetchAttendance(_selectedDateRange!);
   }
 
-  Future<void> _pickDateRange(BuildContext context) async {
-    final DateTimeRange? pickedRange = await showDateRangePicker(
+  // Load all students
+  _loadStudents() async {
+    setState(() {
+      _isLoading = true;
+    });
+    _students = await Db().getAllStudents();
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  // Handle date range picker
+  _pickDateRange() async {
+    DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 1000)),
-      lastDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
     );
 
-    if (pickedRange != null) {
-      selectedDateRange = pickedRange;
-      await _fetchFilteredStudents();
+    if (picked != null) {
+      setState(() {
+        _selectedDateRange = picked;
+      });
+
+      // Fetch attendance for the selected date range
+      _fetchAttendance(picked);
     }
+  }
+
+  // Fetch attendance based on date range
+  _fetchAttendance(DateTimeRange dateRange) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    if (_selectedOutput == 'Absent Students') {
+      _absentStudents = await Db().fetchAbsentStudents(dateRange);
+    } else if (_selectedOutput == '100% Absent Students') {
+      _100PercentAbsent = await Db().fetch100PercentAbsentStudents(dateRange);
+    } else if (_selectedOutput == '100% Present Students') {
+      _100PercentPresent = await Db().fetch100Perce4ntPresentStudents(dateRange);
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  // Mark student as present
+  _markStudentPresent(int studentId) async {
+    if (_selectedDateRange != null) {
+      await Db().markPresent(studentId, _selectedDateRange!.start);
+      _fetchAttendance(_selectedDateRange!); // Refresh the attendance list
+    }
+  }
+
+  // Mark student as absent
+  _markStudentAbsent(int studentId) async {
+    if (_selectedDateRange != null) {
+      await Db().markAbsent(studentId, _selectedDateRange!.start);
+      _fetchAttendance(_selectedDateRange!); // Refresh the attendance list
+    }
+  }
+
+  // Format date for display (using intl for a nicer format)
+  String _formatDate(DateTime date) {
+    return DateFormat('dd MMM').format(date); // Day and Month format
+  }
+
+  // Format full date range (with 'from' and 'to' labels)
+  String _formatDateRange(DateTimeRange range) {
+    return '${DateFormat('dd MMM').format(range.start)} to ${DateFormat('dd MMM').format(range.end)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Dropdown and Date Range Picker
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: DropdownButton<Choice>(
-                  isExpanded: true,
-                  value: _choice,
-                  items: Choice.values.map((choice) {
-                    return DropdownMenuItem<Choice>(
-                      value: choice,
-                      child: Text(
-                        choice == Choice.fullAbsent
-                            ? '100% Absent'
-                            : choice == Choice.fullPresent
-                                ? '100% Present'
-                                : 'Absent Students',
-                      ),
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: [
+            // Date range selection and dropdown in a Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Date Range Button
+                ElevatedButton(
+                  onPressed: _pickDateRange,
+                  child: Text(
+                    _selectedDateRange == null
+                        ? 'Select Date Range'
+                        : _formatDateRange(_selectedDateRange!),
+                    overflow: TextOverflow.ellipsis, // Prevent overflow if the text is too long
+                  ),
+                ),
+                const SizedBox(width: 10), // Spacer between the button and dropdown
+                // Dropdown for selecting output
+                DropdownButton<String>(
+                  value: _selectedOutput,
+                  items: [
+                    'Absent Students',
+                    '100% Absent Students',
+                    '100% Present Students',
+                  ].map((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
                     );
                   }).toList(),
-                  onChanged: (selectedChoice) {
+                  onChanged: (value) {
                     setState(() {
-                      _choice = selectedChoice;
+                      _selectedOutput = value!;
                     });
-                    _fetchFilteredStudents();
+                    if (_selectedDateRange != null) {
+                      _fetchAttendance(_selectedDateRange!);
+                    }
                   },
-                  hint: const Text('Select a filter'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Attendance list for the selected output
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_selectedDateRange != null &&
+                _selectedOutput == 'Absent Students' &&
+                _absentStudents.isEmpty)
+              const Text('No absent students found for the selected range.')
+            else if (_selectedDateRange != null && _selectedOutput == 'Absent Students')
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _absentStudents.length,
+                  itemBuilder: (context, index) {
+                    final absentStudent = _absentStudents[index];
+                    return ListTile(
+                      title: Text(absentStudent.studentName),
+                      subtitle: Text(
+                        'Roll: ${absentStudent.rollNumber}, Course: ${absentStudent.date}',
+                      ),
+                    );
+                  },
+                ),
+              )
+            else if (_selectedDateRange != null && _selectedOutput == '100% Absent Students')
+              // Handle "100% Absent Students"
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _100PercentAbsent.isEmpty ? 1 : _100PercentAbsent.length,
+                  itemBuilder: (context, index) {
+                    if (_100PercentAbsent.isEmpty) {
+                      return const Center(
+                          child: Text('No 100% absent students found for the selected range.'));
+                    }
+                    final absentStudent = _100PercentAbsent[index];
+                    return ListTile(
+                      title: Text(absentStudent.studentName),
+                      subtitle: Text(
+                        'Roll: ${absentStudent.rollNumber}, Course: ${absentStudent.courseName}\nAbsent on: ${absentStudent.date}',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.check_circle),
+                        onPressed: () => _markStudentPresent(absentStudent.id),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else if (_selectedDateRange != null && _selectedOutput == '100% Present Students')
+              // Handle "100% Present Students"
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _100PercentPresent.isEmpty ? 1 : _100PercentPresent.length,
+                  itemBuilder: (context, index) {
+                    if (_100PercentPresent.isEmpty) {
+                      return const Center(
+                          child: Text('No 100% present students found for the selected range.'));
+                    }
+                    final student = _100PercentPresent[index];
+                    return ListTile(
+                      title: Text(student.studentName),
+                      subtitle: Text('Roll: ${student.rollNumber}, Course: ${student.courseName}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.remove_circle),
+                        onPressed: () => _markStudentAbsent(student.id),
+                      ),
+                    );
+                  },
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.date_range),
-                onPressed: () => _pickDateRange(context),
-              ),
-            ],
-          ),
+          ],
         ),
-        // Display filtered students
-        Expanded(
-          child: ValueListenableBuilder(
-            valueListenable: filteredStudents,
-            builder: (context, List<AbsentStudent> students, _) {
-              if (students.isEmpty) {
-                return const Center(child: Text('No students found for the selected filter.'));
-              }
-              return ListView.builder(
-                itemCount: students.length,
-                itemBuilder: (context, index) {
-                  AbsentStudent student = students[index];
-                  return ListTile(
-                    title: Text(student.studentName),
-                    subtitle: student.date != null
-                        ? Text('Roll: ${student.rollNumber}, Date: ${student.date}')
-                        : Text('Roll: ${student.rollNumber}'),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

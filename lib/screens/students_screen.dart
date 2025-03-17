@@ -20,22 +20,28 @@ class _StudentsScreenState extends State<StudentsScreen> {
   void initState() {
     super.initState();
 
-    // Initial load ofa all students
-    Db().loadAllStudents();
-    // Db().deleteAllData();
+    // Initial load of all students from the database
+    _loadStudents();
+  }
+
+  // Load students from the database
+  _loadStudents() async {
+    List<Student> students = await Db().getAllStudents();
+    allStudents.value = students; // Update the ValueNotifier with the fetched students
   }
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-        valueListenable: allStudents,
-        builder: (context, ind, _) {
-          if (allStudents.value.isNotEmpty) {
-            return const ExcelSheetStudents();
-          } else {
-            return const ImportStudentsFromExcel();
-          }
-        });
+      valueListenable: allStudents,
+      builder: (context, ind, _) {
+        if (allStudents.value.isNotEmpty) {
+          return const ExcelSheetStudents();
+        } else {
+          return const ImportStudentsFromExcel();
+        }
+      },
+    );
   }
 }
 
@@ -56,10 +62,8 @@ class _ImportStudentsFromExcelState extends State<ImportStudentsFromExcel> {
           InkWell(
             onTap: () async {
               var result = await importExcelSheet(context);
-              print(result);
               if (result != null) {
-                print('// returned result not null');
-                await excelSheetToStudent(result);
+                await excelSheetToStudent(result); // Convert and save the students to the database
               }
             },
             child: Image.asset(
